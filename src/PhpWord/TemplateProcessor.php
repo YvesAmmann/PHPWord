@@ -17,13 +17,13 @@
 
 namespace PhpOffice\PhpWord;
 
-use PhpOffice\Common\Text;
 use PhpOffice\PhpWord\Escaper\RegExp;
 use PhpOffice\PhpWord\Escaper\Xml;
 use PhpOffice\PhpWord\Exception\CopyFileException;
 use PhpOffice\PhpWord\Exception\CreateTemporaryFileException;
 use PhpOffice\PhpWord\Exception\Exception;
 use PhpOffice\PhpWord\Shared\ZipArchive;
+use Zend\Stdlib\StringUtils;
 
 class TemplateProcessor
 {
@@ -61,6 +61,13 @@ class TemplateProcessor
      * @var string[]
      */
     protected $tempDocumentFooters = array();
+
+    /**
+     * Content of body (in XML format) of the temporary document
+     *
+     * @var string[]
+     */
+    protected $tempDocumentBody;
 
     /**
      * @since 0.12.0 Throws CreateTemporaryFileException and CopyFileException instead of Exception
@@ -101,6 +108,9 @@ class TemplateProcessor
             $index++;
         }
         $this->tempDocumentMainPart = $this->fixBrokenMacros($this->zipClass->getFromName($this->getMainPartName()));
+
+        // Document body extraction
+        $this->tempDocumentBody = preg_replace('/.*<w:body>(.*)<\/w:body>.*/s', '$1', $this->tempDocumentMainPart);
     }
 
     /**
@@ -192,7 +202,9 @@ class TemplateProcessor
      */
     protected static function ensureUtf8Encoded($subject)
     {
-        if (!Text::isUTF8($subject)) {
+        $subject = str_replace('&', '&amp;', $subject);
+
+        if (!StringUtils::isValidUtf8($subject)) {
             $subject = utf8_encode($subject);
         }
 
@@ -422,7 +434,7 @@ class TemplateProcessor
         }
 
         /*
-         * Note: we do not use `rename` function here, because it loses file ownership data on Windows platform.
+         * Note: we do not use `rename` function here, because it looses file ownership data on Windows platform.
          * As a result, user cannot open the file directly getting "Access denied" message.
          *
          * @see https://github.com/PHPOffice/PHPWord/issues/532
@@ -571,5 +583,12 @@ class TemplateProcessor
         }
 
         return substr($this->tempDocumentMainPart, $startPosition, ($endPosition - $startPosition));
+    }
+
+    /**
+     * Add new page.
+     */
+    public function addPage() {
+        $this->tempDocumentMainPart = preg_replace('/<\/w:body>/', '<w:br w:type="page"/>'.$this->tempDocumentBody.'</w:body>/', $this->tempDocumentMainPart);
     }
 }
